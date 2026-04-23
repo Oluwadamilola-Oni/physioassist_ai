@@ -24,7 +24,6 @@ with st.sidebar:
     st.divider()
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.body_map_query = ""
         st.rerun()
 
 # --- Main Area ---
@@ -34,14 +33,94 @@ st.caption("Physiotherapy guidance, available anytime.")
 # --- Initialize session state ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "body_map_query" not in st.session_state:
-    st.session_state.body_map_query = ""
 
-# --- Body Map ---
-with st.expander("🗺️ Use Body Map — tap where it hurts", expanded=True):
-    st.caption("Tap the area(s) where you feel pain, then copy the generated message into the chat below.")
+# --- Welcome message ---
+if len(st.session_state.messages) == 0:
+    st.markdown("""
+    👋 **Welcome! I'm Physio Support Bot.**
 
-    selected_parts = st.components.v1.html("""
+    I'm here to help you with physiotherapy-related questions and concerns.
+    Whether you're dealing with pain, recovering from an injury, or looking for
+    exercise guidance — just ask me anything!
+
+    **You can either:**
+    - Open the **Body Map** below, tap where it hurts, copy the message, and paste it in the chat
+    - Or type your question directly in the chat
+
+    > ⚠️ I provide general guidance only. For diagnosis and treatment, please see a licensed physiotherapist.
+    """)
+
+# --- Display chat history ---
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- Chat function ---
+def chat(user_input):
+    messages = [
+        {
+            "role": "system",
+            "content": """
+            You are Physio Support Bot, a professional and friendly physiotherapy assistant
+            for the general public. You specialize in musculoskeletal and orthopedic rehab.
+
+            Your goal is to provide safe, simple, and helpful physiotherapy guidance.
+            You do NOT replace a licensed physiotherapist — always remind users to seek
+            professional help for diagnosis and treatment.
+
+            If a question is completely unrelated to physiotherapy or health, politely
+            let the user know that you only handle physiotherapy-related questions.
+
+            Always respond in this format:
+
+            **Possible Cause:**
+            ...
+
+            **What To Do:**
+            ...
+
+            **What To Avoid:**
+            ...
+
+            **When To See a Physiotherapist:**
+            ...
+
+            Keep responses simple, clear, and patient-friendly.
+            """
+        }
+    ]
+
+    for msg in st.session_state.messages[-5:]:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+
+    messages.append({"role": "user", "content": user_input})
+
+    response = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=messages
+    )
+
+    return response.choices[0].message.content
+
+# --- Chat input (ABOVE body map so it's always visible) ---
+if prompt := st.chat_input("Describe your pain or paste your body map message here..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            response = chat(prompt)
+            st.markdown(response)
+
+    st.session_state.messages.append({"role": "assistant", "content": response})
+
+# --- Body Map (BELOW chat, collapsed by default) ---
+with st.expander("🗺️ Body Map — tap where it hurts", expanded=False):
+    st.caption("Tap area(s) where you feel pain → copy the generated message → paste it in the chat above.")
+
+    st.components.v1.html("""
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { background: transparent; font-family: sans-serif; }
@@ -57,7 +136,7 @@ with st.expander("🗺️ Use Body Map — tap where it hurts", expanded=True):
       .msg-box { margin-top: 8px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #444; display: none; line-height: 1.5; }
       .copy-btn { margin-top: 8px; padding: 8px 16px; border-radius: 8px; border: none; background: #c0392b; color: #fff; font-size: 12px; cursor: pointer; font-weight: 500; display: none; }
       .copy-btn:hover { background: #a93226; }
-      .copy-confirm { font-size: 11px; color: #27ae60; margin-top: 4px; display: none; }
+      .copy-confirm { font-size: 11px; color: #27ae60; margin-top: 4px; display: none; font-weight: 500; }
       .clr-btn { margin-top: 6px; margin-left: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; background: transparent; color: #999; font-size: 11px; cursor: pointer; display: none; }
       .btn-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
       .region { cursor: pointer; transition: opacity 0.12s; }
@@ -141,20 +220,18 @@ with st.expander("🗺️ Use Body Map — tap where it hurts", expanded=True):
           <button class="copy-btn" id="copy-btn" onclick="copyMsg()">Copy message</button>
           <button class="clr-btn" id="clr-btn" onclick="clearAll()">Clear</button>
         </div>
-        <div class="copy-confirm" id="copy-confirm">Copied! Now paste it into the chat below.</div>
+        <div class="copy-confirm" id="copy-confirm">✅ Copied! Now scroll up and paste it into the chat.</div>
       </div>
     </div>
 
     <script>
       const sel = new Set();
-
       function toggle(el) {
         const part = el.getAttribute('data-part');
         if (sel.has(part)) { sel.delete(part); el.classList.remove('active'); }
         else { sel.add(part); el.classList.add('active'); }
         update();
       }
-
       function update() {
         const d = document.getElementById('sel-display');
         const h = document.getElementById('sel-hint');
@@ -179,105 +256,19 @@ with st.expander("🗺️ Use Body Map — tap where it hurts", expanded=True):
           clr.style.display = 'inline-block';
         }
       }
-
       function clearAll() {
         sel.clear();
         document.querySelectorAll('.region.active').forEach(e => e.classList.remove('active'));
         update();
       }
-
       function copyMsg() {
         const msg = 'I have pain or discomfort in the following area(s): ' + Array.from(sel).join(', ') + '. Can you help me understand what might be causing it and what I should do?';
         navigator.clipboard.writeText(msg).then(() => {
           document.getElementById('copy-confirm').style.display = 'block';
         }).catch(() => {
-          const el = document.getElementById('msg-box');
-          el.select && el.select();
           document.execCommand('copy');
           document.getElementById('copy-confirm').style.display = 'block';
         });
       }
     </script>
     """, height=580, scrolling=False)
-
-# --- Welcome message ---
-if len(st.session_state.messages) == 0:
-    st.markdown("""
-    👋 **Welcome! I'm your Physio Support Bot.**
-
-    I'm here to help you with physiotherapy-related questions and concerns.
-    Whether you're dealing with pain, recovering from an injury, or looking for
-    exercise guidance — just ask me anything!
-
-    **You can either:**
-    - Use the **Body Map** above to tap where it hurts, copy the message, and paste it below
-    - Or type your question directly in the chat
-
-    > ⚠️ I provide general guidance only. For diagnosis and treatment, please see a licensed physiotherapist.
-    """)
-
-# --- Display chat history ---
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# --- Chat function ---
-def chat(user_input):
-    messages = [
-        {
-            "role": "system",
-            "content": """
-            You are Physio Support Bot, a professional and friendly physiotherapy assistant
-            for the general public. You specialize in musculoskeletal and orthopedic rehab.
-
-            Your goal is to provide safe, simple, and helpful physiotherapy guidance.
-            You do NOT replace a licensed physiotherapist — always remind users to seek
-            professional help for diagnosis and treatment.
-
-            If a question is completely unrelated to physiotherapy or health, politely
-            let the user know that you only handle physiotherapy-related questions.
-
-            Always respond in this format:
-
-            **Possible Cause:**
-            ...
-
-            **What To Do:**
-            ...
-
-            **What To Avoid:**
-            ...
-
-            **When To See a Physiotherapist:**
-            ...
-
-            Keep responses simple, clear, and patient-friendly.
-            """
-        }
-    ]
-
-    for msg in st.session_state.messages[-5:]:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-
-    messages.append({"role": "user", "content": user_input})
-
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=messages
-    )
-
-    return response.choices[0].message.content
-
-# --- Chat input ---
-if prompt := st.chat_input("Describe your pain or paste your body map message here..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = chat(prompt)
-            st.markdown(response)
-
-    st.session_state.messages.append({"role": "assistant", "content": response})
