@@ -27,7 +27,7 @@ with st.sidebar:
         st.rerun()
 
 # --- Main Area ---
-st.title("🦴 PhysioAssist AI")
+st.title("🦴 Physio Support Bot")
 st.caption("Physiotherapy guidance, available anytime.")
 
 # --- Initialize chat history ---
@@ -200,7 +200,7 @@ window.addEventListener('message', function(event) {
 # --- Welcome message ---
 if len(st.session_state.messages) == 0:
     st.markdown("""
-    👋 **Welcome! I'm PhysioAssist AI.**
+    👋 **Welcome! I'm your support bot.**
     
     I'm here to help you with physiotherapy-related questions and concerns.
     Whether you're dealing with pain, recovering from an injury, or looking for 
@@ -224,7 +224,7 @@ def chat(user_input):
         {
             "role": "system",
             "content": """
-            You are PhysioAssist AI, a professional and friendly physiotherapy assistant
+            You are Physio Support Bot, a professional and friendly physiotherapy assistant
             for the general public. You specialize in musculoskeletal and orthopedic rehab.
 
             Your goal is to provide safe, simple, and helpful physiotherapy guidance.
